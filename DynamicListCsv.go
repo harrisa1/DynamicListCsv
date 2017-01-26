@@ -163,7 +163,7 @@ func getUserNumber(org OrgInfo, userIndex int) string {
 	var userNumber string
 	if org.ZeroPadded {
         maxIndexLength := len([]rune(strconv.Itoa(org.StartingIndex + org.UserCount)))
-        currentIndex := strconv.Itoa(userIndex + org.StartingIndex)
+        currentIndex := strconv.Itoa(userIndex)
         currentIndexLength := len([]rune(currentIndex))
         for currentIndexLength < maxIndexLength {
             currentIndex = "0" + currentIndex

@@ -11,7 +11,7 @@
 		},
 		"UserCount": 2000,
 		"StartingIndex": 0,
-		"ZeroPadded": false,
+		"ZeroPadded": true,
 		"Password": "test1234"
 	}
 ]

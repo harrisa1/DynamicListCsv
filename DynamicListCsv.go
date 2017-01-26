@@ -1,127 +1,194 @@
 package main
 
-// GOOS=windows GOARCH=386 go build -o CsvCombiner.exe CsvCombiner.go
+// If running on linux and wishing to build a windows executable run this:
+// GOOS=windows GOARCH=386 go build -o DynamicListCsv.exe DynamicListCsv.go
+//
+// If running on windows and wishing to build a windows executable run this:
+// set GOOS=linux
+// set GOARCH=amd64 
+// go build -o DynamicListCsv DynamicListCsv.go
 
 import (
-	"flag"
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
 )
 
-type OrgDetails struct {
-    UserNamePrefix string
-    OrgEmailDomain string
-	UserCount int
-	StartingIndex int
-	ZeroPadded bool
-	Password string
+type OrgDetail struct {
+	UserNamePrefix string
+	OrgDomainInfo  OrgDomainInfo
+	UserCount      int
+	StartingIndex  int
+	ZeroPadded     bool
+	Password       string
 }
 
-const OUTPUTFILE = "test.csv"
+type OrgDomainInfo struct {
+	EmailDomainPrefix string
+	EmailDomainSuffix string
+	Count             int
+	StartingIndex     int
+	ZeroPadded        bool
+}
 
-var configFile string
-var orgs []OrgDetails
+type OrgInfo struct {
+	UserNamePrefix string
+	OrgEmailDomain string
+	UserCount      int
+	StartingIndex  int
+	ZeroPadded     bool
+	Password       string
+}
 
-func main(){
-	getInput()
-	getOrgDetails()
-	outputCsv = createCsv()
-	writeCsv(outputCsv)
-    
-    fmt.Println("Press enter to exit")
+const INPUTFILE = "config.json"
+const OUTPUTFILE = "output.csv"
 
+func main() {
+    go beginProcess()
+	fmt.Println("Press enter to exit")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
 
-
-func getInput() {
-	configFilePtr := flag.String("config", "config.json", "")
-	flag.Parse()
-	configFile = *configFilePtr
+func beginProcess(){    
+    orgDetails := getOrgDetails()
+    orgInfo := getOrgInfoFromOrgDetails(orgDetails)
+    outputCsv := createCsv(orgInfo)
+    go writeCsv(outputCsv)
 }
 
-func getOrgDetails(){
-    //TODO read from config.json
-    orgs = make([]OrgDetails, 12)
-    for i := 0; i < len(orgs); i++ {
-        orgNum := i+1;
-        org[i] = OrgDetails{
-            "user",
-            "testacdload"+orgNum+".test",
-            2000,
-            0,
-            false,
-            "test1234"
+func getOrgDetails() []OrgDetail {
+	data, _ := ioutil.ReadFile(INPUTFILE)
+	var orgDetails []OrgDetail
+	json.Unmarshal(data, &orgDetails)
+	return orgDetails
+}
+
+func getOrgInfoFromOrgDetails(orgDetails []OrgDetail) []OrgInfo {
+	var orgInfos []OrgInfo
+	for _, orgDetail := range orgDetails {
+        if orgDetail.OrgDomainInfo.Count > 0 {
+            for i := 0; i < orgDetail.OrgDomainInfo.Count; i++ {
+                newOrgInfo := getNewOrgInfo(orgDetail, i)
+                orgInfos = append(orgInfos, newOrgInfo)
+            }
+        } else {
+            newOrgInfo := getNewOrgInfo(orgDetail, 0)
+            orgInfos = append(orgInfos, newOrgInfo)
         }
-    }
+	}
+	return orgInfos
 }
 
-func createCsv() [][]string {
-    var outputCsv [][]string
-    currentUserIndices := getUserStartingIndices()
-    currentOrgIndex := 0
-    for i := 0; i < getTotalUserCount(); i++{
-        newRow = getNewRow(currentOrgIndex, currentUserIndices[currentOrgIndex])
-        outputCsv = append(outputCsv, newRow)
-        currentUserIndices[currentOrgIndex]++
-        currentOrgIndex = getNextOrgIndex(currentOrgIndex, currentUserIndices)
-    }
-    return outputCsv
+func getNewOrgInfo(orgDetail OrgDetail, index int) OrgInfo {
+	orgInfo := OrgInfo{
+		orgDetail.UserNamePrefix,
+		getOrgEmailDomain(orgDetail.OrgDomainInfo, index),
+		orgDetail.UserCount,
+		orgDetail.StartingIndex,
+		orgDetail.ZeroPadded,
+		orgDetail.Password}
+	return orgInfo
 }
 
-func getNextOrgIndex(currentOrgIndex int, currentUserIndices []int) int {
-    newIndex := currentOrgIndex + 1
-    if newIndex >= len(orgs) {
-        newIndex = 0
-    }
-    if currentUserIndices[newIndex] > orgs[newIndex].UserCount + orgs[newIndex].StartingIndex {
-        newIndex = getNextOrgIndex(newIndex, currentUserIndices)
-    }
-    return newIndex
+func getOrgEmailDomain(orgDomainInfo OrgDomainInfo, index int) string {
+	var orgNumber string
+	if orgDomainInfo.Count == 0 {
+		orgNumber = ""
+	} else {
+		orgNumber = getOrgNumber(orgDomainInfo, index)
+	}
+	orgEmailDomain := orgDomainInfo.EmailDomainPrefix + orgNumber + orgDomainInfo.EmailDomainSuffix
+	return orgEmailDomain
 }
 
-func getNewRow(orgIndex int, userIndex int) []string {
-    org := orgs[orgIndex]
-    newRow := make([]string, 2)
-    newRow[0] = org.UserNamePrefix + getUserNumber(org, userIndex) + "@" + org.OrgEmailDomain
-    newRow[1] = org.Password
-    return newRow
+func getOrgNumber(orgDomainInfo OrgDomainInfo, index int) string {
+	var orgNumber string
+	if orgDomainInfo.ZeroPadded {
+        maxIndexLength := len([]rune(strconv.Itoa(orgDomainInfo.StartingIndex + orgDomainInfo.Count)))
+        currentIndex := strconv.Itoa(index + orgDomainInfo.StartingIndex)
+        currentIndexLength := len([]rune(currentIndex))
+        for currentIndexLength < maxIndexLength {
+            currentIndex = "0" + currentIndex
+            currentIndexLength = len([]rune(currentIndex))
+        }
+		orgNumber = currentIndex
+	} else {
+		orgNumber = strconv.Itoa(index + orgDomainInfo.StartingIndex)
+	}
+	return orgNumber
 }
 
-func getUserNumber(org OrgDetails, userIndex int) string {
-    var userNumber string
-    if (org.ZeroPadded){
-        //TODO pad with zeros
-        userNumber = userIndex
-    } else {
-        userNumber = userIndex
-    }
-    return userNumber
+func createCsv(orgs []OrgInfo) [][]string {
+	var outputCsv [][]string
+	currentUserIndices := getUserStartingIndices(orgs)
+	currentOrgIndex := 0
+	for i := 0; i < getTotalUserCount(orgs); i++ {
+		newRow := getNewRow(orgs, currentOrgIndex, currentUserIndices[currentOrgIndex])
+		outputCsv = append(outputCsv, newRow)
+		currentUserIndices[currentOrgIndex]++
+		currentOrgIndex = getNextOrgIndex(orgs, currentOrgIndex, currentUserIndices)
+	}
+	return outputCsv
 }
 
-func getUserStartingIndices() []int {
-    currentUserIndices = make([]int, len(orgs))
-    for index, org := range orgs {
-        currentUserIndices[index] = org.StartingUserIndex
-    }
-    return currentUserIndices
+func getUserStartingIndices(orgs []OrgInfo) []int {
+	currentUserIndices := make([]int, len(orgs))
+	for index, org := range orgs {
+		currentUserIndices[index] = org.StartingIndex
+	}
+	return currentUserIndices
 }
 
-func getTotalUserCount() int {
-    totalUserCount := 0
-    for _, org := range orgs {
-        totalUserCount += org.UserCount
-    }
-    return totalUserCount
+func getTotalUserCount(orgs []OrgInfo) int {
+	totalUserCount := 0
+	for _, org := range orgs {
+		totalUserCount += org.UserCount
+	}
+	return totalUserCount
 }
 
-func writeCsv(outputCsv [][]string){
-    fmt.Println("Writing output file: " + OUTPUTFILE)
+func getNewRow(orgs []OrgInfo, orgIndex int, userIndex int) []string {
+	org := orgs[orgIndex]
+	newRow := make([]string, 2)
+	newRow[0] = org.UserNamePrefix + getUserNumber(org, userIndex) + "@" + org.OrgEmailDomain
+	newRow[1] = org.Password
+	return newRow
+}
+
+func getUserNumber(org OrgInfo, userIndex int) string {
+	var userNumber string
+	if org.ZeroPadded {
+        maxIndexLength := len([]rune(strconv.Itoa(org.StartingIndex + org.UserCount)))
+        currentIndex := strconv.Itoa(userIndex + org.StartingIndex)
+        currentIndexLength := len([]rune(currentIndex))
+        for currentIndexLength < maxIndexLength {
+            currentIndex = "0" + currentIndex
+            currentIndexLength = len([]rune(currentIndex))
+        }
+        userNumber = currentIndex
+	} else {
+		userNumber = strconv.Itoa(userIndex)
+	}
+	return userNumber
+}
+
+func getNextOrgIndex(orgs []OrgInfo, currentOrgIndex int, currentUserIndices []int) int {
+	newIndex := currentOrgIndex + 1
+	if newIndex >= len(orgs) {
+		newIndex = 0
+	}
+	if currentUserIndices[newIndex] > orgs[newIndex].UserCount+orgs[newIndex].StartingIndex {
+		newIndex = getNextOrgIndex(orgs, newIndex, currentUserIndices)
+	}
+	return newIndex
+}
+
+func writeCsv(outputCsv [][]string) {
+	fmt.Println("Writing output file: " + OUTPUTFILE)
 	outputFile, err := os.Create(OUTPUTFILE)
 	if err != nil {
 		fmt.Println(err)

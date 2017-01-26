@@ -1,0 +1,17 @@
+[
+	{
+		"UserNamePrefix": "user",
+		"OrgDomainInfo":
+		{
+			"EmailDomainPrefix": "testacdload",
+	    	"EmailDomainSuffix": ".test",
+	    	"Count": 12,
+	    	"StartingIndex": 1,
+	    	"ZeroPadded": false
+		},
+		"UserCount": 2000,
+		"StartingIndex": 0,
+		"ZeroPadded": false,
+		"Password": "test1234"
+	}
+]
